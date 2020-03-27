@@ -4,6 +4,8 @@ use combine::{parser, ParseResult, Parser};
 use combine::easy::Error;
 use combine::error::StreamError;
 use combine::combinator::{many, many1, optional, position, choice};
+use num_bigint::BigInt;
+use num_traits::cast::ToPrimitive;
 
 use crate::tokenizer::{Kind as T, Token, TokenStream};
 use crate::helpers::{punct, ident, kind, name};
@@ -12,7 +14,7 @@ use crate::position::Pos;
 /// Text abstracts over types that hold a string value.
 /// It is used to make the AST generic over the string type.
 pub trait Text<'a>: 'a {
-    type Value: 'a + From<&'a str> + AsRef<str> + std::borrow::Borrow<str> + PartialEq + Eq + PartialOrd + Ord + fmt::Debug + Clone; 
+    type Value: 'a + From<&'a str> + AsRef<str> + std::borrow::Borrow<str> + PartialEq + Eq + PartialOrd + Ord + fmt::Debug + Clone;
 }
 
 impl<'a> Text<'a> for &'a str {
@@ -43,7 +45,7 @@ pub struct Directive<'a, T: Text<'a>> {
 #[derive(Debug, Clone, PartialEq)]
 // we use i64 as a reference implementation: graphql-js thinks even 32bit
 // integers is enough. We might consider lift this limit later though
-pub struct Number(pub(crate) i64);
+pub struct Number(pub(crate) BigInt);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value<'a, T: Text<'a>> {
@@ -68,19 +70,19 @@ pub enum Type<'a, T: Text<'a>> {
 impl Number {
     /// Returns a number as i64 if it fits the type
     pub fn as_i64(&self) -> Option<i64> {
-        Some(self.0)
+        self.0.to_i64()
     }
 }
 
 impl From<i32> for Number {
     fn from(i: i32) -> Self {
-        Number(i as i64)
+        Number(BigInt::from(i))
     }
 }
 
 pub fn directives<'a, T>(input: &mut TokenStream<'a>)
     -> ParseResult<Vec<Directive<'a, T>>, TokenStream<'a>>
-    where T: Text<'a>, 
+    where T: Text<'a>,
 {
     many(position()
         .skip(punct("@"))
@@ -126,7 +128,9 @@ pub fn float_value<'a, S>(input: &mut TokenStream<'a>)
     .parse_stream(input)
 }
 
-fn unquote_block_string<'a>(src: &'a str) -> Result<String, Error<Token<'a>, Token<'a>>> {
+pub fn unquote_block_string<'a>(src: &'a str)
+    -> Result<String, Error<Token<'a>, Token<'a>>>
+{
     debug_assert!(src.starts_with("\"\"\"") && src.ends_with("\"\"\""));
     let indent = src[3..src.len()-3].lines().skip(1)
         .filter_map(|line| {
@@ -162,7 +166,7 @@ fn unquote_block_string<'a>(src: &'a str) -> Result<String, Error<Token<'a>, Tok
     Ok(result)
 }
 
-fn unquote_string<'a>(s: &'a str) -> Result<String, Error<Token, Token>> 
+pub fn unquote_string<'a>(s: &'a str) -> Result<String, Error<Token, Token>>
 {
     let mut res = String::with_capacity(s.len());
     debug_assert!(s.starts_with('"') && s.ends_with('"'));

@@ -94,11 +94,11 @@
 #[cfg(test)] #[macro_use] extern crate pretty_assertions;
 
 
-mod common;
+pub mod common;
 #[macro_use]
 mod format;
-mod position;
-mod tokenizer;
+pub mod position;
+pub mod tokenizer;
 mod helpers;
 pub mod query;
 pub mod schema;

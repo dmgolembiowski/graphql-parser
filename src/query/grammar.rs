@@ -76,15 +76,18 @@ pub fn selection_set<'a, S>(input: &mut TokenStream<'a>)
 }
 
 pub fn query<'a, T: Text<'a>>(input: &mut TokenStream<'a>)
-    -> ParseResult<Query<'a, T>, TokenStream<'a>>
+    -> ParseResult<Operation<'a, T>, TokenStream<'a>>
     where T: Text<'a>,
 {
     position()
     .skip(ident("query"))
     .and(parser(operation_common))
-    .map(|(position, (name, variable_definitions, directives, selection_set))|
-        Query {
-            position, name, selection_set, variable_definitions, directives,
+    .map(|(position, (name, (vdefs, ins_point), directives, selection_set))|
+        Operation {
+            kind: OperationKind::Query,
+            variable_definitions: vdefs,
+            insert_variables: ins_point,
+            position, name, selection_set, directives,
         })
     .parse_stream(input)
 }
@@ -93,7 +96,7 @@ pub fn query<'a, T: Text<'a>>(input: &mut TokenStream<'a>)
 #[allow(type_alias_bounds)]
 type OperationCommon<'a, T: Text<'a>> = (
     Option<T::Value>,
-    Vec<VariableDefinition<'a, T>>,
+    (Vec<VariableDefinition<'a, T>>, InsertVars),
     Vec<Directive<'a, T>>,
     SelectionSet<'a, T>,
 );
@@ -103,23 +106,46 @@ pub fn operation_common<'a, T: Text<'a>>(input: &mut TokenStream<'a>)
     where T: Text<'a>,
 {
     optional(name::<'a, T>())
-    .and(optional(
-        punct("(")
-        .with(many1(
-            (
-                position(),
-                punct("$").with(name::<'a, T>()).skip(punct(":")),
-                parser(parse_type),
-                optional(
-                    punct("=")
-                    .with(parser(default_value))),
-            ).map(|(position, name, var_type, default_value)| {
-                VariableDefinition {
-                    position, name, var_type, default_value,
-                }
-            })))
-        .skip(punct(")")))
-        .map(|vars| vars.unwrap_or_else(Vec::new)))
+    .and(position()
+        .and(optional(
+            punct("(")
+            .with(many1(
+                (
+                    position(),
+                    punct("$").with(name::<'a, T>()).skip(punct(":")),
+                    parser(parse_type),
+                    optional((
+                        position(),
+                        punct("=")
+                        .with(parser(default_value)),
+                        position()
+                    )),
+                ).map(|(position, name, var_type, def)| {
+                    VariableDefinition {
+                        position, name, var_type,
+                        default_value: def.map(|(s, value, e)| DefaultValue {
+                            span: (s, e),
+                            value,
+                        }),
+                    }
+                })))
+            .and(position())
+            .skip(punct(")"))
+        )).map(|(position, vars)| {
+            vars
+            .map(|(v, position)| {
+                (v, InsertVars {
+                    kind: InsertVarsKind::Normal,
+                    position,
+                })
+            })
+            .unwrap_or_else(|| {
+                (Vec::new(), InsertVars {
+                    kind: InsertVarsKind::Parens,
+                    position,
+                })
+            })
+        }))
     .and(parser(directives))
     .and(parser(selection_set))
     .map(|(((a, b), c), d)| (a, b, c, d))
@@ -127,41 +153,59 @@ pub fn operation_common<'a, T: Text<'a>>(input: &mut TokenStream<'a>)
 }
 
 pub fn mutation<'a, T: Text<'a>>(input: &mut TokenStream<'a>)
-    -> ParseResult<Mutation<'a, T>, TokenStream<'a>>
+    -> ParseResult<Operation<'a, T>, TokenStream<'a>>
     where T: Text<'a>,
 {
     position()
     .skip(ident("mutation"))
     .and(parser(operation_common))
-    .map(|(position, (name, variable_definitions, directives, selection_set))|
-        Mutation {
-            position, name, selection_set, variable_definitions, directives,
+    .map(|(position, (name, (vdefs, ins_point), directives, selection_set))|
+        Operation {
+            kind: OperationKind::Mutation,
+            variable_definitions: vdefs,
+            insert_variables: ins_point,
+            position, name, selection_set, directives,
         })
     .parse_stream(input)
 }
 
 pub fn subscription<'a, T: Text<'a>>(input: &mut TokenStream<'a>)
-    -> ParseResult<Subscription<'a, T>, TokenStream<'a>>
+    -> ParseResult<Operation<'a, T>, TokenStream<'a>>
     where T: Text<'a>,
 {
     position()
     .skip(ident("subscription"))
     .and(parser(operation_common))
-    .map(|(position, (name, variable_definitions, directives, selection_set))|
-        Subscription {
-            position, name, selection_set, variable_definitions, directives,
+    .map(|(position, (name, (vdefs, ins_point), directives, selection_set))|
+        Operation {
+            kind: OperationKind::Subscription,
+            variable_definitions: vdefs,
+            insert_variables: ins_point,
+            position, name, selection_set, directives,
         })
     .parse_stream(input)
 }
 
 pub fn operation_definition<'a, S>(input: &mut TokenStream<'a>)
-    -> ParseResult<OperationDefinition<'a, S>, TokenStream<'a>>
+    -> ParseResult<Operation<'a, S>, TokenStream<'a>>
     where S: Text<'a>,
 {
-    parser(selection_set).map(OperationDefinition::SelectionSet)
-    .or(parser(query).map(OperationDefinition::Query))
-    .or(parser(mutation).map(OperationDefinition::Mutation))
-    .or(parser(subscription).map(OperationDefinition::Subscription))
+    position().and(parser(selection_set))
+        .map(|(position, selection_set)| Operation {
+            kind: OperationKind::ImplicitQuery,
+            position: selection_set.span.0,
+            name: None,
+            variable_definitions: Vec::new(),
+            insert_variables: InsertVars {
+                kind: InsertVarsKind::Query,
+                position,
+            },
+            directives: Vec::new(),
+            selection_set,
+        })
+    .or(parser(query))
+    .or(parser(mutation))
+    .or(parser(subscription))
     .parse_stream(input)
 }
 
@@ -193,7 +237,7 @@ pub fn definition<'a, S>(input: &mut TokenStream<'a>)
 }
 
 /// Parses a piece of query language and returns an AST
-pub fn parse_query<'a, S>(s: &'a str) -> Result<Document<'a, S>, ParseError> 
+pub fn parse_query<'a, S>(s: &'a str) -> Result<Document<'a, S>, ParseError>
     where S: Text<'a>,
 {
     let mut tokens = TokenStream::new(s);
@@ -220,26 +264,42 @@ mod test {
     fn one_field() {
         assert_eq!(ast("{ a }"), Document {
             definitions: vec![
-                Definition::Operation(OperationDefinition::SelectionSet(
-                    SelectionSet {
-                        span: (Pos { line: 1, column: 1 },
-                               Pos { line: 1, column: 5 }),
+                Definition::Operation(Operation {
+                    kind: OperationKind::ImplicitQuery,
+                    position: Pos { line: 1, column: 1,
+                                    character: 0, token: 0 },
+                    name: None,
+                    variable_definitions: Vec::new(),
+                    insert_variables: InsertVars {
+                        kind: InsertVarsKind::Query,
+                        position: Pos { line: 1, column: 1,
+                                        character: 0, token: 0},
+                    },
+                    directives: Vec::new(),
+                    selection_set: SelectionSet {
+                        span: (Pos { line: 1, column: 1,
+                                     character: 0, token: 0 },
+                               Pos { line: 1, column: 5,
+                                     character: 4, token: 2 }),
                         items: vec![
                             Selection::Field(Field {
-                                position: Pos { line: 1, column: 3 },
+                                position: Pos { line: 1, column: 3,
+                                                character: 2, token: 1},
                                 alias: None,
                                 name: "a".into(),
                                 arguments: Vec::new(),
                                 directives: Vec::new(),
                                 selection_set: SelectionSet {
-                                    span: (Pos { line: 1, column: 3 },
-                                           Pos { line: 1, column: 3 }),
+                                    span: (Pos { line: 1, column: 3,
+                                                 character: 2, token: 1},
+                                           Pos { line: 1, column: 3,
+                                                 character: 2, token: 1}),
                                     items: Vec::new()
                                 },
                             }),
                         ],
                     }
-                ))
+                })
             ],
         });
     }
@@ -249,13 +309,27 @@ mod test {
         assert_eq!(ast("{ a(t: true, f: false, n: null) }"),
             Document {
                 definitions: vec![
-                    Definition::Operation(OperationDefinition::SelectionSet(
-                        SelectionSet {
-                            span: (Pos { line: 1, column: 1 },
-                                   Pos { line: 1, column: 33 }),
+                    Definition::Operation(Operation {
+                        kind: OperationKind::ImplicitQuery,
+                        position: Pos { line: 1, column: 1,
+                                        character: 0, token: 0},
+                        name: None,
+                        variable_definitions: Vec::new(),
+                        insert_variables: InsertVars {
+                            kind: InsertVarsKind::Query,
+                            position: Pos { line: 1, column: 1,
+                                            character: 0, token: 0},
+                        },
+                        directives: Vec::new(),
+                        selection_set: SelectionSet {
+                            span: (Pos { line: 1, column: 1,
+                                         character: 0, token: 0},
+                                   Pos { line: 1, column: 33,
+                                         character: 32, token: 13}),
                             items: vec![
                                 Selection::Field(Field {
-                                    position: Pos { line: 1, column: 3 },
+                                    position: Pos { line: 1, column: 3,
+                                                    character: 2, token: 1},
                                     alias: None,
                                     name: "a".into(),
                                     arguments: vec![
@@ -268,14 +342,16 @@ mod test {
                                     ],
                                     directives: Vec::new(),
                                     selection_set: SelectionSet {
-                                        span: (Pos { line: 1, column: 3 },
-                                               Pos { line: 1, column: 3 }),
+                                        span: (Pos { line: 1, column: 3,
+                                                     character: 2, token: 1},
+                                               Pos { line: 1, column: 3,
+                                                     character: 2, token: 1}),
                                         items: Vec::new()
                                     },
                                 }),
                             ],
                         }
-                    ))
+                    })
                 ],
             });
     }
@@ -286,8 +362,8 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected="number too large")]
     fn large_integer() {
-        ast("{ a(x: 10000000000000000000000000000 }");
+        assert_eq!(ast("{ a(x: 10000000000000000000000000000) }").to_string(),
+            "{\n  a(x: 10000000000000000000000000000)\n}\n");
     }
 }
