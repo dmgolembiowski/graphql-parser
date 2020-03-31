@@ -20,8 +20,8 @@
 //! -------------------------------
 //!
 //! ```rust
-//! # extern crate graphql_parser;
-//! use graphql_parser::query::{parse_query, ParseError};
+//! # extern crate edb_graphql_parser;
+//! use edb_graphql_parser::query::{parse_query, ParseError};
 //!
 //! # fn parse() -> Result<(), ParseError> {
 //! let ast = parse_query::<&str>("query MyQuery { field1, field2 }")?;
@@ -43,8 +43,8 @@
 //! --------------------------------
 //!
 //! ```rust
-//! # extern crate graphql_parser;
-//! use graphql_parser::schema::{parse_schema, ParseError};
+//! # extern crate edb_graphql_parser;
+//! use edb_graphql_parser::schema::{parse_schema, ParseError};
 //!
 //! # fn parse() -> Result<(), ParseError> {
 //! let ast = parse_schema::<String>(r#"
