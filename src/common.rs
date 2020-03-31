@@ -70,9 +70,7 @@ impl Number {
     pub fn as_i64(&self) -> Option<i64> {
         self.0.to_i64()
     }
-}
-impl AsRef<BigInt> for Number {
-    fn as_ref(&self) -> &BigInt {
+    pub fn as_bigint(&self) -> &BigInt {
         &self.0
     }
 }
