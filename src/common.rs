@@ -43,8 +43,6 @@ pub struct Directive<'a, T: Text<'a>> {
 /// in `serde_json`: encapsulate value in new-type, allowing type
 /// to be extended later.
 #[derive(Debug, Clone, PartialEq)]
-// we use i64 as a reference implementation: graphql-js thinks even 32bit
-// integers is enough. We might consider lift this limit later though
 pub struct Number(pub(crate) BigInt);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,6 +69,11 @@ impl Number {
     /// Returns a number as i64 if it fits the type
     pub fn as_i64(&self) -> Option<i64> {
         self.0.to_i64()
+    }
+}
+impl AsRef<BigInt> for Number {
+    fn as_ref(&self) -> &BigInt {
+        &self.0
     }
 }
 
