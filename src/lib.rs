@@ -102,6 +102,7 @@ pub mod tokenizer;
 mod helpers;
 pub mod query;
 pub mod schema;
+pub mod visitor;
 
 pub use crate::query::parse_query;
 pub use crate::schema::parse_schema;
