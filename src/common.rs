@@ -30,10 +30,17 @@ impl<'a> Text<'a> for std::borrow::Cow<'a, str> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct DirectiveArgument<'a, T: Text<'a>> {
+    pub name: T::Value,
+    pub value: Value<'a, T>,
+    pub value_position: Pos,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Directive<'a, T: Text<'a>> {
     pub position: Pos,
     pub name: T::Value,
-    pub arguments: Vec<(T::Value, Value<'a, T>)>,
+    pub arguments: Vec<DirectiveArgument<'a, T>>,
 }
 
 /// This represents integer number
@@ -88,10 +95,30 @@ pub fn directives<'a, T>(input: &mut TokenStream<'a>)
     many(position()
         .skip(punct("@"))
         .and(name::<'a, T>())
-        .and(parser(arguments))
+        .and(parser(directive_arguments))
         .map(|((position, name), arguments)| {
             Directive { position, name, arguments }
         }))
+    .parse_stream(input)
+}
+
+pub fn directive_arguments<'a, T>(input: &mut TokenStream<'a>)
+    -> ParseResult<Vec<DirectiveArgument<'a, T>>, TokenStream<'a>>
+    where T: Text<'a>,
+{
+    optional(
+        punct("(")
+        .with(many1(name::<'a, T>()
+            .skip(punct(":"))
+            .and(position())
+            .and(parser(value))
+            .map(|((name, value_position), value)| {
+                DirectiveArgument { name, value, value_position }
+            })))
+        .skip(punct(")")))
+    .map(|opt| {
+        opt.unwrap_or_else(Vec::new)
+    })
     .parse_stream(input)
 }
 

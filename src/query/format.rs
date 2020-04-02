@@ -3,6 +3,7 @@ use std::fmt;
 use crate::format::{Displayable, Formatter, Style, format_directives};
 
 use crate::query::ast::*;
+use crate::common::DirectiveArgument;
 
 
 impl<'a, T: Text<'a>> Document<'a, T>
@@ -126,6 +127,25 @@ impl<'a, T: Text<'a>> Displayable for Selection<'a, T>
             Selection::InlineFragment(ref frag) => frag.display(f),
             Selection::FragmentSpread(ref frag) => frag.display(f),
         }
+    }
+}
+
+fn format_directive_arguments<'a, T: Text<'a>>(
+    arguments: &[DirectiveArgument<'a, T>], f: &mut Formatter)
+    where T: Text<'a>,
+{
+    if !arguments.is_empty() {
+        f.write("(");
+        f.write(arguments[0].name.as_ref());
+        f.write(": ");
+        arguments[0].value.display(f);
+        for arg in &arguments[1..] {
+            f.write(", ");
+            f.write(arg.name.as_ref());
+            f.write(": ");
+            arg.value.display(f);
+        }
+        f.write(")");
     }
 }
 
@@ -300,7 +320,7 @@ impl<'a, T: Text<'a>> Displayable for Directive<'a, T>
     fn display(&self, f: &mut Formatter) {
         f.write("@");
         f.write(self.name.as_ref());
-        format_arguments(self.arguments.as_slice(), f);
+        format_directive_arguments(self.arguments.as_slice(), f);
     }
 }
 
