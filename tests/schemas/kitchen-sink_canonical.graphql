@@ -94,7 +94,7 @@ input AnnotatedInput @onInputObject {
 input UndefinedInput
 
 extend input InputType {
-  other: Float = 12300
+  other: Float = 1.23e4
 }
 
 extend input InputType @onInputObject

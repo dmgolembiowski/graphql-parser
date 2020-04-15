@@ -56,7 +56,7 @@ pub struct Number(pub(crate) BigInt);
 pub enum Value<'a, T: Text<'a>> {
     Variable(T::Value),
     Int(Number),
-    Float(f64),
+    Float(String),
     String(String),
     Boolean(bool),
     Null,
