@@ -220,6 +220,13 @@ impl<'a> TokenStream<'a> {
                     self.position.column += len;
                     self.off += len;
 
+                    if real.is_none() {
+                        if let Some(exponent) = exponent {
+                            if !value[exponent+1..].starts_with('-') {
+                                return Ok((IntValue, len));
+                            }
+                        }
+                    }
                     Ok((FloatValue, len))
                 } else {
                     let value = &self.buf[self.off..][..len];
@@ -427,6 +434,18 @@ mod test {
         assert_eq!(tok_typ("-132"), [IntValue]);
         assert_eq!(tok_str("132"), ["132"]);
         assert_eq!(tok_typ("132"), [IntValue]);
+        assert_eq!(tok_str("132e+0"), ["132e+0"]);
+        assert_eq!(tok_typ("132e+0"), [IntValue]);
+        assert_eq!(tok_str("132e100"), ["132e100"]);
+        assert_eq!(tok_typ("132e100"), [IntValue]);
+        assert_eq!(tok_str("0e+0"), ["0e+0"]);
+        assert_eq!(tok_typ("0e+0"), [IntValue]);
+        assert_eq!(tok_str("-0e+0"), ["-0e+0"]);
+        assert_eq!(tok_typ("-0e+0"), [IntValue]);
+        assert_eq!(tok_str("-1e+0"), ["-1e+0"]);
+        assert_eq!(tok_typ("-1e+0"), [IntValue]);
+        assert_eq!(tok_str("-132e+0"), ["-132e+0"]);
+        assert_eq!(tok_typ("-132e+0"), [IntValue]);
         assert_eq!(tok_str("a(x: 10) { b }"),
             ["a", "(", "x", ":", "10", ")", "{", "b", "}"]);
         assert_eq!(tok_typ("a(x: 10) { b }"),
@@ -456,18 +475,8 @@ mod test {
         assert_eq!(tok_typ("-132.0"), [FloatValue]);
         assert_eq!(tok_str("132.0"), ["132.0"]);
         assert_eq!(tok_typ("132.0"), [FloatValue]);
-        assert_eq!(tok_str("0e+0"), ["0e+0"]);
-        assert_eq!(tok_typ("0e+0"), [FloatValue]);
         assert_eq!(tok_str("0.0e+0"), ["0.0e+0"]);
         assert_eq!(tok_typ("0.0e+0"), [FloatValue]);
-        assert_eq!(tok_str("-0e+0"), ["-0e+0"]);
-        assert_eq!(tok_typ("-0e+0"), [FloatValue]);
-        assert_eq!(tok_str("-1e+0"), ["-1e+0"]);
-        assert_eq!(tok_typ("-1e+0"), [FloatValue]);
-        assert_eq!(tok_str("-132e+0"), ["-132e+0"]);
-        assert_eq!(tok_typ("-132e+0"), [FloatValue]);
-        assert_eq!(tok_str("132e+0"), ["132e+0"]);
-        assert_eq!(tok_typ("132e+0"), [FloatValue]);
         assert_eq!(tok_str("a(x: 10.0) { b }"),
             ["a", "(", "x", ":", "10.0", ")", "{", "b", "}"]);
         assert_eq!(tok_typ("a(x: 10.0) { b }"),
